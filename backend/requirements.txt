@@ -1,0 +1,13 @@
+fastapi>=0.115
+uvicorn[standard]>=0.30
+python-dotenv>=1.0
+pydantic>=2.5
+numpy>=1.26
+
+# retrieval bits (we'll wire them next step)
+faiss-cpu>=1.7.4
+rank-bm25>=0.2.2
+sentence-transformers>=3.0
+
+# pdf parsing
+pymupdf>=1.24
