@@ -1,2 +1,5 @@
 # Environmental files
 .env
+
+# Cache files
+__pycache__/
