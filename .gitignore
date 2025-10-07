@@ -1,5 +1,14 @@
-# Environmental files
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Env files
 .env
 
-# Cache files
-__pycache__/
+# Artifacts & data
+artifacts/
+data/
+
+# OS junk
+.DS_Store

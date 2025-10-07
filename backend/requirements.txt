@@ -11,3 +11,7 @@ sentence-transformers>=3.0
 
 # pdf parsing
 pymupdf>=1.24
+
+transformers>=4.43   # for tokenizer
+nltk>=3.9            # simple sentence splitting
+orjson>=3.10    
