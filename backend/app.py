@@ -24,6 +24,8 @@ def dev_ingest(background_tasks: BackgroundTasks, input_dir: str = "data"):
     return {"status": "started", "input_dir": input_dir}
 
 @app.get("/search")
-def search(q: str = Query(..., min_length=2), k: int = 8):
-    r = retriever().hybrid(q, k_dense=max(20, k*3), k_bm25=max(20, k*3), k_final=k)
-    return {"query": q, "k": k, "hits": r}
+def search(q: str = Query(..., min_length=2), k: int = 8,
+            rerank: bool = False, top_m: int = 50):
+    r = retriever().hybrid(q, k_dense=max(20, k*3), k_bm25=max(20, k*3),
+                            k_final=k, rerank=rerank, top_m=top_m)
+    return {"query": q, "k": k, "rerank": rerank, "top_m": top_m, "hits": r}

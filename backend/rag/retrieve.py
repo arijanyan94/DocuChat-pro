@@ -1,7 +1,8 @@
 import os, pickle, orjson, numpy as np, faiss
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Optional
 from rank_bm25 import BM25Okapi
 from sentence_transformers import SentenceTransformer
+from backend.rag.rerank import Reranker
 
 ART = "artifacts"
 
@@ -20,6 +21,18 @@ class Retriever:
 		with open(os.path.join(art_dir, "bm25_tokens.pkl"), "rb") as f:
 			self.bm25_tokens = pickle.load(f)
 		self.bm25 = BM25Okapi(self.bm25_tokens)
+		self._reranker: Optional[Reranker] = None
+
+	def _ensure_reranker(self):
+		if self._reranker is None:
+			self._reranker = Reranker("BAAI/bge-reranker-base")
+
+	def _get_text_by_row(self, row_idx: int) -> str:
+		with open(os.path.join(self.art_dir, "chunks.jsonl"), "rb") as f:
+			for i, l in enumerate(f):
+				if i == row_idx:
+					return orjson.loads(l)["text"]
+		return ""
 
 	def dense_search(self, query: str, k=20) -> List[Tuple[int, float]]:
 		q = self.emb_model.encode([query], normalize_embeddings=True)
@@ -43,24 +56,41 @@ class Retriever:
 		fused = sorted(ranks.items(), key=lambda x: -x[1])[:k]
 		return fused # list of (row_idx, fused_score)
 
-	def hybrid(self, query: str, k_dense=20, k_bm25=20, k_final=8) -> List[Dict]:
+	def hybrid(self, query: str, k_dense=20, k_bm25=20, k_final=8,
+				rerank: bool = False, top_m: int = 50) -> List[Dict]:
 		d = self.dense_search(query, k_dense)
 		b = self.bm25_search(query, k_bm25)
-		fused = self.rrf_fuse(d, b, k=k_final)
+		fused = self.rrf_fuse(d, b, k=max(k_final, top_m))
 
-		out = []
+		candidates: List[Dict] = []
 		for row_idx, fscore in fused:
 			m = self.metas[row_idx]
-			out.append({
+			candidates.append({
 				"row": row_idx,
-				"score": fscore,
+				"fused_score": round(float(fscore), 6),
 				"chunk_id": m["chunk_id"],
 				"doc_id": m["doc_id"],
 				"page": m["page"],
 				"source_path": m["source_path"],
-				"snippet": self._short_snippet(row_idx)
+				"text": self._get_text_by_row(row_idx)
 			})
-		return out
+		
+		if not rerank:
+			# Trim to k_final and attach a short snippet for readability
+			out = candidates[:k_final]
+			for it in out:
+				t = it["text"].replace("\n", " ").strip()
+				it["snippet"] = (t[:240] + "...") if len(t) > 240 else t
+			return out
+
+		self._ensure_reranker()
+		top_pool = candidates[:top_m]
+		reranked = self._reranker.rerank(query, top_pool, text_key="text", top_n=k_final)
+
+		for it in reranked:
+			t = it["text"].replace("\n", " ").strip()
+			it["snippet"] = (t[:240] + "...") if len(t) > 240 else t
+		return reranked
 
 	def _short_snippet(self, row_idx: int, n=240) -> str:
 		with open(os.path.join(self.art_dir, "meta_count.json"), "rb") as f:
