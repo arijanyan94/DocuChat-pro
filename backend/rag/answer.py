@@ -38,21 +38,30 @@ class Answerer:
 			return "no_term_overlap"
 
 		# Optional rerank threshold (if rerank is on and score is very low)
-		if rerank:
+		if rerank and hits:
 			top = hits[0].get("rerank_score", 0.0)
-			if top < 0.001:
+			if top < 0.02:
 				return "low_rerank_score"
 
 		return None
 
 	# ---- public entry ----
-	def answer(self, q: str, k: int = 6, rerank: bool = True, top_m: int = 40,
-				max_tokens: int = 512, temperature: float = 0.2) -> Dict:
+	def answer(self, q: str, k: int = 4, rerank: bool = True, top_m: int = 24,
+				max_tokens: int = 384, temperature: float = 0.1,
+				retrieval_mode: str = "hybrid") -> Dict:
 
-		hits = self.retriever.hybrid(
-			q, k_dense=max(20, k*3), k_bm25=max(20, k*3),
-			k_final=k, rerank=rerank, top_m=top_m
+		require_terms = [t for t in q.lower().split() if len(t) > 3]
+		mode = retrieval_mode.lower()
+		hits = self.retriever.search(
+			q,
+			mode=("hybrid_rerank" if (mode == "hybrid" and rerank) else mode),
+			k=k,
+			k_dense=max(20, k*3),
+			k_bm25=max(20, k*3),
+			rerank=rerank,
+			top_m=top_m
 		)
+		hits = [h for h in hits if any(t in h["text"].lower() for t in require_terms)]
 
 		abstain_reason = self._should_abstain(q, hits, rerank)
 		if abstain_reason:

@@ -25,7 +25,8 @@ class Retriever:
 
 	def _ensure_reranker(self):
 		if self._reranker is None:
-			self._reranker = Reranker("BAAI/bge-reranker-base")
+			# self._reranker = Reranker("BAAI/bge-reranker-base")
+			self._reranker = Reranker("cross-encoder/ms-marco-MiniLM-L-6-v2")
 
 	def _get_text_by_row(self, row_idx: int) -> str:
 		with open(os.path.join(self.art_dir, "chunks.jsonl"), "rb") as f:
@@ -106,7 +107,66 @@ class Retriever:
 		t = rec["text"].replace("\n", " ").strip()
 		return (t[:n] + "...") if len(t) > n else t
 
+	def _materialize_items(self, pairs, include_text: bool = True) -> List[Dict]:
+		out = []
+		for row_idx, fscore in pairs:
+			m = self.metas[row_idx]
+			item = {
+				"row": row_idx,
+				"score": float(fscore),
+				"chunk_id": m["chunk_id"],
+				"doc_id": m["doc_id"],
+				"page": m["page"],
+				"source_path": m["source_path"],
+			}
+			if include_text:
+				# full text for downstream (LLM or reranker)
+				with open(os.path.join(self.art_dir, "chunks.jsonl"), "rb") as f:
+					for i, l in enumerate(f):
+						if i == row_idx:
+							item["text"] = orjson.loads(l)["text"]
+							break
+			t = item.get("text", "")
+			t = t.replace("\n", " ").strip()
+			item["snippet"] = (t[:240] + "...") if len(t) > 240 else t
+			out.append(item)
 
+		return out
+
+	def search(self, query: str, mode: str = "hybrid",
+				k: int = 8, k_dense: int = 20, k_bm25: int = 20,
+				rerank: bool = False, top_m: int = 50):
+		"""
+		mode: 'bm25' | 'dense' | 'hybrid' | 'hybrid_rerank'
+		Returns a list of hit dicts aligned with existing /search.
+		"""
+		mode = mode.lower()
+		if mode == "bm25":
+			b = self.bm25_search(query, max(k_bm25, k))
+			return self._materialize_items(b[:k])
+
+		if mode == "dense":
+			d = self.dense_search(query, max(k_dense, k))
+			return self._materialize_items(d[:k])
+
+		# hybrid family
+		d = self.dense_search(query, k_dense)
+		b = self.bm25_search(query, k_bm25)
+		fused = self.rrf_fuse(d, b, k=max(k, top_m))
+		candidates = self._materialize_items(fused)
+
+		if mode in ("hybrid_rerank",) or rerank:
+			rr = Reranker("BAAI/bge-reranker-base")
+			pool = candidates[:top_m]
+			texts = [it["text"] for it in pool]
+			scores = rr.score_pairs(query, texts, batch_size=32)
+			for it, s in zip(pool, scores):
+				it["rerank_score"] = float(s)
+			pool.sort(key=lambda x: -x["rerank_score"])
+			return pool[:k]
+
+		# plain hybrid (RRF only)
+		return candidates[:k]
 
 
 
