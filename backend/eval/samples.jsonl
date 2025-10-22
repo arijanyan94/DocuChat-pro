@@ -1,0 +1,2 @@
+{"question": "What is retrieval-augmented generation (RAG)?", "reference_answer": "RAG combines retrieval of external documents with a generator that answers using the retrieved evidence.", "doc_id_hint": "grad"}
+{"question": "What is the purpose of instruction tuning?", "reference_answer": "To make pretrained LLMs follow natural-language instructions across many tasks.", "doc_id_hint": "scaling_instruction_fine_tuning"}

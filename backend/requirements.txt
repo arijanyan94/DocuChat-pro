@@ -15,3 +15,6 @@ pymupdf>=1.24
 transformers>=4.43   # for tokenizer
 nltk>=3.9            # simple sentence splitting
 orjson>=3.10    
+
+ragas>=0.1.20
+datasets>=2.20
