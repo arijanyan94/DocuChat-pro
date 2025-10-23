@@ -4,6 +4,8 @@ from typing import List, Optional
 from backend.rag.ingest import ingest_folder
 from backend.rag.retrieve import Retriever
 from backend.rag.answer import Answerer
+from backend.guard.rails import guard_query
+from backend.obs.logger import log_event
 
 app = FastAPI(title="DocuChat Pro", version="0.4.0")
 RET = None
@@ -49,11 +51,37 @@ def search(q: str = Query(..., min_length=2), k: int = 8,
 
 @app.post("/chat")
 def chat(req: ChatRequest):
+    # Guard input
+    verdict = guard_query(req.query)
+    if not verdict['ok']:
+        log_event({"route": "chat", "action": "blocked",
+            "reason": verdict["reason"], "q": req.query})
+        return {
+            "status": "blocked",
+            "reason": verdict["reason"],
+            "message": "Your request violates the assistant's safety rules or includes sensitive content."
+        }
+
     # Route to the Answerer, which internally calls retriever
     res = answerer().answer(
         q=req.query, k=req.k, rerank=req.rerank, top_m=req.top_m,
         max_tokens=req.max_tokens, temperature=req.temperature
     )
+
+    # Log outcome
+    out = {
+        "route": "chat",
+        "action": "answered",
+        "status": res.get("status"),
+        "q": req.query,
+        "rerank": req.rerank,
+        "k": req.k,
+        "top_m": req.top_m,
+        "n_hits": len(res.get("hits", [])),
+        "reason": res.get("reason"),
+    }
+    log_event(out)
+
     return res
 
 
