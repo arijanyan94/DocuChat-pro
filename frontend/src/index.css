@@ -1,0 +1,6 @@
+:root { color-scheme: light dark; }
+body { margin: 0; background: #fff; }
+@media (prefers-color-scheme: dark) {
+  body { background: #0b0b0b; color: #eaeaea; }
+  textarea { background: #111; color: #eaeaea; border-color: #333; }
+}

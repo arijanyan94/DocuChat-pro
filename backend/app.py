@@ -1,4 +1,5 @@
 from fastapi import FastAPI, BackgroundTasks, Query
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 from backend.rag.ingest import ingest_folder
@@ -10,6 +11,14 @@ from backend.obs.logger import log_event
 app = FastAPI(title="DocuChat Pro", version="0.4.0")
 RET = None
 ANS = None
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],  # Vite dev server
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 def retriever() -> Retriever:
     global RET
