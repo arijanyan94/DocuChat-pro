@@ -25,16 +25,17 @@ It demonstrates the **complete RAG lifecycle** — from data ingestion and vecto
 
 ---
 
+```markdown
 ## 🧩 Architecture
 
-```mermaid
+mermaid
 graph TD
-    A[📄 Documents / PDFs] -->|Ingest| B[Chunker + Embedder]
-    B --> C[🧱 Vector Store (Artifacts)]
-    C --> D[🔍 Retriever (BM25 + Dense + Hybrid)]
-    D --> E[⚖️ Reranker (optional)]
-    E --> F[🤖 LLM Generator (OpenAI API)]
-    F --> G[🧠 Evaluation (RAGAS)]
+    A[Documents / PDFs] -->|Ingest| B[Chunker & Embedder]
+    B --> C[Vector Store (Artifacts)]
+    C --> D[Retriever (BM25 / Dense / Hybrid)]
+    D --> E[Reranker (optional)]
+    E --> F[LLM Generator (OpenAI API)]
+    F --> G[Evaluation (RAGAS)]
 ```
 
 ---
