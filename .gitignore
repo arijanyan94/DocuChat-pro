@@ -9,6 +9,7 @@ __pycache__/
 # Artifacts & data
 artifacts/
 data/
+runtime/
 
 # OS junk
 .DS_Store
