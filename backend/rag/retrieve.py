@@ -1,4 +1,4 @@
-import os, pickle, orjson, numpy as np, faiss
+import os, pickle, orjson, numpy as np, faiss, time
 from typing import List, Dict, Tuple, Optional
 from rank_bm25 import BM25Okapi
 from sentence_transformers import SentenceTransformer
@@ -140,33 +140,63 @@ class Retriever:
 		mode: 'bm25' | 'dense' | 'hybrid' | 'hybrid_rerank'
 		Returns a list of hit dicts aligned with existing /search.
 		"""
+		t0 = time.time()
+		t_dense = t_bm25 = t_rrf = t_rerank = 0
 		mode = mode.lower()
 		if mode == "bm25":
+			s0 = time.time()
 			b = self.bm25_search(query, max(k_bm25, k))
-			return self._materialize_items(b[:k])
+			t_bm25 = time.time() - s0
+			hits = self._materialize_items(b[:k])
+			timings = {
+				"t_bm25_ms": int(t_bm25*1000),
+				"t_dense_ms": 0,
+				"t_rrf_ms": 0,
+				"t_rerank_ms": 0
+			}
+			return hits, timings
 
 		if mode == "dense":
+			s0 = time.time()
 			d = self.dense_search(query, max(k_dense, k))
-			return self._materialize_items(d[:k])
+			t_dense = time.time() - s0
+			hits = self._materialize_items(d[:k])
+			timings = {
+				"t_bm25_ms": 0,
+				"t_dense_ms": int(t_dense*1000),
+				"t_rrf_ms": 0,
+				"t_rerank_ms": 0
+			}
+			return hits, timings
 
 		# hybrid family
-		d = self.dense_search(query, k_dense)
-		b = self.bm25_search(query, k_bm25)
-		fused = self.rrf_fuse(d, b, k=max(k, top_m))
+		s0 = time.time(); d = self.dense_search(query, k_dense); t_dense = time.time() - s0
+		s0 = time.time(); b = self.bm25_search(query, k_bm25); t_bm25 = time.time() - s0
+		s0 = time.time(); fused = self.rrf_fuse(d, b, k=max(k, top_m)); t_rrf = time.time() - s0
 		candidates = self._materialize_items(fused)
 
 		if mode in ("hybrid_rerank",) or rerank:
 			rr = Reranker("BAAI/bge-reranker-base")
 			pool = candidates[:top_m]
 			texts = [it["text"] for it in pool]
+			s0 = time.time()
 			scores = rr.score_pairs(query, texts, batch_size=32)
+			t_rerank = time.time() - s0
 			for it, s in zip(pool, scores):
 				it["rerank_score"] = float(s)
 			pool.sort(key=lambda x: -x["rerank_score"])
-			return pool[:k]
+			hits = pool[:k]
+		else:
+			hits = candidates[:k]
 
+		timings = {
+			"t_bm25_ms": int(t_bm25*1000),
+			"t_dense_ms": int(t_dense*1000),
+			"t_rrf_ms": int(t_rrf*1000),
+			"t_rerank_ms": int(t_rerank*1000),
+		}
 		# plain hybrid (RRF only)
-		return candidates[:k]
+		return hits, timings
 
 
 

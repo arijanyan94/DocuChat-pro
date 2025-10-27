@@ -1,4 +1,4 @@
-import os
+import os, time
 from typing import Optional
 from dotenv import load_dotenv
 
@@ -19,7 +19,8 @@ class OpenAIChat(LLMBase):
 		self.model = model or os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
 	def generate(self, prompt: str, max_tokens: int = 512, temperature: float = 0.2) -> str:
-		r = self.client.chat.completions.create(
+		t0 = time.time()
+		resp = self.client.chat.completions.create(
 			model=self.model,
 			temperature=temperature,
 			max_tokens=max_tokens,
@@ -28,7 +29,31 @@ class OpenAIChat(LLMBase):
 				{"role": "user", "content": prompt}
 			],
 		)
-		return r.choices[0].message.content.strip()
+		dt = time.time() - t0
+		text = resp.choices[0].message.content.strip() or ""
+		u = getattr(resp, "usage", None)
+
+		def _get_u(attr, default=None):
+			# pydantic model attributes
+			if u is not None and hasattr(u, attr):
+				try:
+					return int(getattr(u, attr))
+				except Exception:
+					return default
+			if isinstance(u, dict):
+				try:
+					return int(u.get(attr, default))
+				except Exception:
+					return default
+			return default
+
+		usage = {
+			"prompt_tokens": _get_u("prompt_tokens"),
+			"completions_tokens": _get_u("completions_tokens"),
+			"total_tokens": _get_u("total_tokens"),
+			"gen_ms": int((time.time() - dt) * 1000),
+		}
+		return text, usage
 
 class OllamaChat(LLMBase):
 	"""
